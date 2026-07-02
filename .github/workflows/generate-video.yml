@@ -46,13 +46,8 @@ jobs:
             exit 1
           fi
 
-      - name: Étape 2/3 - Générer les clips avatar (D-ID) puis assembler la vidéo
-        env:
-          D_ID_API_KEY: ${{ secrets.D_ID_API_KEY }}
-          D_ID_VOICE_ID: fr-FR-DeniseNeural
-          AVATAR_IMAGE_PATH: assets/avatar/presentateur_optimized.jpg
-          AVATAR_SOURCE_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/assets/avatar/presentateur_optimized.jpg
-        run: python src/pipeline.py generate
+      - name: Étape 2/3 - Générer les clips voix off + slides et assembler la vidéo
+        run: python src/pipeline.py generate --mode voice
 
       - name: Étape 3/3 - Publier la vidéo générée comme artéfact
         if: always()
@@ -61,5 +56,5 @@ jobs:
           name: formation-video
           path: |
             output/formation.mp4
-            data/avatar_clips/*.mp4
+            data/scene_clips/*.mp4
           if-no-files-found: warn

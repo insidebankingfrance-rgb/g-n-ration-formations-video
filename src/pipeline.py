@@ -42,15 +42,21 @@ def prepare(source, pages=None):
     )
 
 
-def generate():
+def generate(mode="voice"):
     narration_path = Path("data/narration.json")
     if not narration_path.exists():
         raise SystemExit(
             "data/narration.json introuvable. Écris d'abord le script de narration "
             "(voir README) avant de lancer cette étape."
         )
-    run([sys.executable, str(SRC_DIR / "generate_avatar_clip.py")])
-    run([sys.executable, str(SRC_DIR / "compose_video.py")])
+    if mode == "avatar":
+        run([sys.executable, str(SRC_DIR / "generate_avatar_clip.py")])
+        run([sys.executable, str(SRC_DIR / "compose_video.py")])
+    elif mode == "voice":
+        run([sys.executable, str(SRC_DIR / "generate_voice_clip.py")])
+        run([sys.executable, str(SRC_DIR / "concat_scenes.py")])
+    else:
+        raise SystemExit(f"Mode inconnu : {mode!r} (attendu : voice ou avatar)")
 
 
 def main():
@@ -61,14 +67,20 @@ def main():
     p_prepare.add_argument("source", help="Chemin vers le fichier .pptx ou .pdf")
     p_prepare.add_argument("--pages", help="Filtre 1-indexé, ex '1,2,9-11' (par défaut : tout le support)")
 
-    subparsers.add_parser("generate", help="Génère les clips avatar puis la vidéo finale")
+    p_generate = subparsers.add_parser("generate", help="Génère les clips vocaux (ou avatar) puis la vidéo finale")
+    p_generate.add_argument(
+        "--mode",
+        choices=["voice", "avatar"],
+        default="voice",
+        help="voice (défaut, gratuit via Edge-TTS) ou avatar (D-ID, requiert D_ID_API_KEY et des crédits)",
+    )
 
     args = parser.parse_args()
 
     if args.command == "prepare":
         prepare(args.source, pages=args.pages)
     elif args.command == "generate":
-        generate()
+        generate(mode=args.mode)
 
 
 if __name__ == "__main__":
