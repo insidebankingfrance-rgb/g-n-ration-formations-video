@@ -50,8 +50,8 @@ jobs:
         env:
           D_ID_API_KEY: ${{ secrets.D_ID_API_KEY }}
           D_ID_VOICE_ID: fr-FR-DeniseNeural
-          AVATAR_IMAGE_PATH: assets/avatar/presentateur.jpg
-          AVATAR_SOURCE_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/assets/avatar/presentateur.jpg
+          AVATAR_IMAGE_PATH: assets/avatar/presentateur_optimized.jpg
+          AVATAR_SOURCE_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/assets/avatar/presentateur_optimized.jpg
         run: python src/pipeline.py generate
 
       - name: Étape 3/3 - Publier la vidéo générée comme artéfact
