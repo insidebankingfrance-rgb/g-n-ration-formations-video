@@ -43,24 +43,54 @@ def _auth_header():
 def _raise_with_body(response, context):
     if response.ok:
         return
-    body = response.text[:2000]
-    print(f"[D-ID {context}] HTTP {response.status_code} : {body}", file=sys.stderr)
+    body = response.text[:4000]
+    print("", flush=True)
+    print("=" * 78, flush=True)
+    print(f"[D-ID {context}] HTTP {response.status_code}", flush=True)
+    print(f"URL     : {response.request.method} {response.request.url}", flush=True)
+    print(f"Body    : {body}", flush=True)
+    print("=" * 78, flush=True)
     response.raise_for_status()
 
 
+def check_credits():
+    """Sanity check l'auth D-ID avant tout : GET /credits doit renvoyer 200."""
+    response = requests.get(f"{API_BASE}/credits", headers=_auth_header(), timeout=30)
+    if not response.ok:
+        _raise_with_body(response, "check_credits (l'authentification a échoué)")
+    print(f"[D-ID] auth OK, crédits : {response.json()}", flush=True)
+
+
 def upload_avatar_image(image_path):
+    """Tente d'uploader l'image via POST /images.
+
+    L'API D-ID a changé de format multipart plusieurs fois : selon la génération
+    de l'endpoint le champ s'appelle "image" ou "file". On tente les deux avant
+    d'abandonner et de laisser remonter l'erreur explicite.
+    """
     image_path = Path(image_path)
     content_type, _ = mimetypes.guess_type(image_path.name)
     content_type = content_type or "image/jpeg"
-    with open(image_path, "rb") as f:
-        response = requests.post(
-            f"{API_BASE}/images",
-            headers=_auth_header(),
-            files={"image": (image_path.name, f, content_type)},
-            timeout=60,
+
+    last_response = None
+    for field_name in ("image", "file"):
+        with open(image_path, "rb") as f:
+            response = requests.post(
+                f"{API_BASE}/images",
+                headers=_auth_header(),
+                files={field_name: (image_path.name, f, content_type)},
+                timeout=60,
+            )
+        if response.ok:
+            print(f"[D-ID] upload OK (champ='{field_name}')", flush=True)
+            return response.json()["url"]
+        last_response = response
+        print(
+            f"[D-ID] upload rejeté avec champ='{field_name}' (HTTP {response.status_code}), on essaie l'autre nom...",
+            flush=True,
         )
-    _raise_with_body(response, "upload_avatar_image")
-    return response.json()["url"]
+    _raise_with_body(last_response, "upload_avatar_image (tous les noms de champ ont échoué)")
+    raise RuntimeError("unreachable")
 
 
 def create_talk(text, source_url, voice_id):
@@ -124,7 +154,9 @@ def main():
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Upload de l'avatar {args.avatar_image}...")
+    check_credits()
+
+    print(f"Upload de l'avatar {args.avatar_image}...", flush=True)
     source_url = upload_avatar_image(args.avatar_image)
 
     for scene in scenes:
