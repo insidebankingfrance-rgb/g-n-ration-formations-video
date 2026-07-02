@@ -12,9 +12,10 @@ premier vrai test (voir docs.d-id.com).
 """
 
 import argparse
-import base64
 import json
+import mimetypes
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -32,22 +33,33 @@ def _auth_header():
     api_key = os.environ.get("D_ID_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("D_ID_API_KEY manquante : configure ton .env (voir .env.example)")
-    # La clé copiée depuis le dashboard D-ID s'utilise généralement telle quelle.
-    # Si D-ID te fournit une clé "email:secret", on l'encode nous-même en base64.
-    if ":" in api_key and not api_key.count(" "):
-        api_key = base64.b64encode(api_key.encode()).decode()
+    # Le dashboard D-ID donne la clé prête à l'emploi, éventuellement préfixée par
+    # "Basic ". On retire ce préfixe s'il est présent puisqu'on l'ajoute nous-même.
+    if api_key.lower().startswith("basic "):
+        api_key = api_key[6:].strip()
     return {"Authorization": f"Basic {api_key}"}
 
 
+def _raise_with_body(response, context):
+    if response.ok:
+        return
+    body = response.text[:2000]
+    print(f"[D-ID {context}] HTTP {response.status_code} : {body}", file=sys.stderr)
+    response.raise_for_status()
+
+
 def upload_avatar_image(image_path):
+    image_path = Path(image_path)
+    content_type, _ = mimetypes.guess_type(image_path.name)
+    content_type = content_type or "image/jpeg"
     with open(image_path, "rb") as f:
         response = requests.post(
             f"{API_BASE}/images",
             headers=_auth_header(),
-            files={"image": f},
+            files={"image": (image_path.name, f, content_type)},
             timeout=60,
         )
-    response.raise_for_status()
+    _raise_with_body(response, "upload_avatar_image")
     return response.json()["url"]
 
 
@@ -67,7 +79,7 @@ def create_talk(text, source_url, voice_id):
         json=payload,
         timeout=60,
     )
-    response.raise_for_status()
+    _raise_with_body(response, "create_talk")
     return response.json()["id"]
 
 
@@ -77,7 +89,7 @@ def wait_for_talk(talk_id):
         response = requests.get(
             f"{API_BASE}/talks/{talk_id}", headers=_auth_header(), timeout=30
         )
-        response.raise_for_status()
+        _raise_with_body(response, "wait_for_talk")
         data = response.json()
         status = data.get("status")
         if status == "done":
