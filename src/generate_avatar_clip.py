@@ -156,8 +156,15 @@ def main():
 
     check_credits()
 
-    print(f"Upload de l'avatar {args.avatar_image}...", flush=True)
-    source_url = upload_avatar_image(args.avatar_image)
+    # D-ID accepte source_url pointant vers n'importe quelle image publique HTTPS,
+    # ce qui contourne son endpoint /images (au format multipart instable). En CI
+    # on passe donc l'URL raw GitHub du fichier committé via AVATAR_SOURCE_URL.
+    source_url = os.environ.get("AVATAR_SOURCE_URL", "").strip()
+    if source_url:
+        print(f"[D-ID] source_url fourni : {source_url}", flush=True)
+    else:
+        print(f"Upload de l'avatar {args.avatar_image}...", flush=True)
+        source_url = upload_avatar_image(args.avatar_image)
 
     for scene in scenes:
         dest = out_dir / f"scene_{scene['index']:02d}.mp4"
