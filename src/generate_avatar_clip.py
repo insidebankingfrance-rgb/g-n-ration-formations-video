@@ -54,11 +54,49 @@ def _raise_with_body(response, context):
 
 
 def check_credits():
-    """Sanity check l'auth D-ID avant tout : GET /credits doit renvoyer 200."""
+    """Sanity check l'auth D-ID et retourne le nombre de crédits restants."""
     response = requests.get(f"{API_BASE}/credits", headers=_auth_header(), timeout=30)
     if not response.ok:
         _raise_with_body(response, "check_credits (l'authentification a échoué)")
-    print(f"[D-ID] auth OK, crédits : {response.json()}", flush=True)
+    data = response.json()
+    remaining = data.get("remaining")
+    if remaining is None and data.get("credits"):
+        remaining = data["credits"][0].get("remaining", 0)
+    print(f"[D-ID] auth OK, crédits restants : {remaining}", flush=True)
+    return int(remaining or 0)
+
+
+# Facturation D-ID : 1 crédit ≈ 15 secondes de vidéo générée.
+# En français, la synthèse vocale tourne à ~15 caractères/seconde (150 mots/min ~ 900 char/min).
+# Donc ~225 caractères ≈ 1 crédit. On arrondit vers le haut par scène.
+CHARS_PER_CREDIT = 225
+
+
+def estimate_credits(scenes):
+    total = 0
+    details = []
+    for scene in scenes:
+        n = len(scene["text"])
+        cost = max(1, -(-n // CHARS_PER_CREDIT))  # ceil
+        total += cost
+        details.append((scene["index"], n, cost))
+    return total, details
+
+
+def ensure_enough_credits(scenes, remaining):
+    total, details = estimate_credits(scenes)
+    print("[D-ID] estimation des coûts par scène :", flush=True)
+    for idx, chars, cost in details:
+        print(f"    scene_{idx:02d} : {chars} caractères -> ~{cost} crédit(s)", flush=True)
+    print(f"[D-ID] total estimé : ~{total} crédits pour {remaining} disponibles", flush=True)
+    if total > remaining:
+        raise SystemExit(
+            f"\nSTOP : la génération demande environ {total} crédits D-ID mais il n'en reste que {remaining}.\n"
+            f"Options :\n"
+            f"  1) Recharger le compte D-ID (plan Lite $5.90/mois, 25 crédits) et relancer.\n"
+            f"  2) Réduire le nombre de slides du PoC via l'input 'pages' du workflow.\n"
+            f"  3) Raccourcir les textes de narration dans data/narration.json.\n"
+        )
 
 
 def upload_avatar_image(image_path):
@@ -154,7 +192,11 @@ def main():
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    check_credits()
+    remaining = check_credits()
+    # On ne compte que les scènes qui n'ont pas encore de clip généré (utile pour reprendre).
+    todo = [s for s in scenes if not (out_dir / f"scene_{s['index']:02d}.mp4").exists()]
+    if todo:
+        ensure_enough_credits(todo, remaining)
 
     # D-ID accepte source_url pointant vers n'importe quelle image publique HTTPS,
     # ce qui contourne son endpoint /images (au format multipart instable). En CI

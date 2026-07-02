@@ -55,8 +55,11 @@ jobs:
         run: python src/pipeline.py generate
 
       - name: Étape 3/3 - Publier la vidéo générée comme artéfact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: formation-video
-          path: output/formation.mp4
-          if-no-files-found: error
+          path: |
+            output/formation.mp4
+            data/avatar_clips/*.mp4
+          if-no-files-found: warn
